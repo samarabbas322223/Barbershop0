@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Royal Barber Shop</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        royal: {
+                            gold: '#d4af37',
+                            silver: '#c0c0c0'
+                        }
+                    },
+                    animation: {
+                        'pulse-glow': 'pulse-glow 2s infinite',
+                    },
+                    keyframes: {
+                        'pulse-glow': {
+                            '0%, 100%': { opacity: '1' },
+                            '50%': { opacity: '0.7' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .toast {
+            transition: all 0.3s ease;
+        }
+        .fade-in {
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .status-light {
+            box-shadow: 0 0 10px currentColor;
+        }
+    </style>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+</head>
+<body class="bg-black text-white min-h-screen">
+    <!-- 
+        BARBER SHOP TOKEN SYSTEM
+        Firebase Realtime Database Integrated
+        Data is synced with Firebase for multi-device access
+    -->
+
+    <!-- Header -->
+    <header class="bg-black border-b border-royal-gold sticky top-0 z-40">
+        <div class="container mx-auto px-4 py-3">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <div id="shopLogo" class="w-10 h-10 bg-royal-gold rounded-full flex items-center justify-center font-bold text-black cursor-pointer">
+                        R
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-royal-gold">Royal Barber</h1>
+                        <p class="text-xs text-gray-400">Premium Grooming Experience</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <!-- Shop Status Light -->
+                    <div id="shopStatusLight" class="flex items-center space-x-2">
+                        <div class="w-3 h-3 rounded-full status-light animate-pulse-glow bg-green-500"></div>
+                        <span class="text-sm text-green-500">Shop Open</span>
+                    </div>
+                    
+                    <!-- Points Checker -->
+                    <div class="hidden sm:block">
+                        <input type="tel" id="pointsPhone" placeholder="Phone for points" 
+                               class="bg-gray-800 text-white px-3 py-1 rounded text-sm w-32 focus:outline-none focus:ring-1 focus:ring-royal-gold">
+                        <button onclick="checkPoints()" class="bg-royal-gold text-black px-2 py-1 rounded text-sm ml-1 hover:bg-royal-silver">Check</button>
+                    </div>
+                    
+                    <!-- Admin Access (Hidden by default) -->
+                    <div id="adminAccess" class="hidden">
+                        <button onclick="showAdminLogin()" class="bg-gray-800 text-white px-3 py-1 rounded text-sm hover:bg-gray-700 border border-royal-silver">
+                            Admin
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Mobile Points Checker -->
+            <div class="sm:hidden mt-3">
+                <div class="flex">
+                    <input type="tel" id="pointsPhoneMobile" placeholder="Phone for points" 
+                           class="flex-1 bg-gray-800 text-white px-3 py-2 rounded-l focus:outline-none focus:ring-1 focus:ring-royal-gold">
+                    <button onclick="checkPointsMobile()" class="bg-royal-gold text-black px-4 py-2 rounded-r hover:bg-royal-silver">Check</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Shop Closed Banner -->
+    <div id="shopClosedBanner" class="bg-red-600 text-white py-2 text-center hidden">
+        <p class="font-bold">SHOP CLOSED - No new bookings accepted</p>
+    </div>
+
+    <main class="container mx-auto px-4 py-8">
+        <!-- Booking Form -->
+        <section id="bookingSection" class="mb-8">
+            <div class="bg-white text-black rounded-lg p-6 shadow-lg">
+                <h2 class="text-2xl font-bold text-royal-gold mb-4">Book Your Service</h2>
+                
+                <form id="bookingForm" class="space-y-4">
+                    <div>
+                        <label for="customerName" class="block text-sm font-medium mb-1">Full Name</label>
+                        <input type="text" id="customerName" required 
+                               class="w-full bg-gray-100 text-black px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-royal-gold"
+                               aria-required="true">
+                    </div>
+                    
+                    <div>
+                        <label for="customerPhone" class="block text-sm font-medium mb-1">Phone Number</label>
+                        <input type="tel" id="customerPhone" required maxlength="10"
+                               class="w-full bg-gray-100 text-black px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-royal-gold"
+                               pattern="[0-9]{10}" aria-required="true">
+                        <p class="text-xs text-gray-600 mt-1">10 digit phone number</p>
+                    </div>
+                    
+                    <div>
+                        <label for="serviceSelect" class="block text-sm font-medium mb-1">Service</label>
+                        <select id="serviceSelect" required
+                                class="w-full bg-gray-100 text-black px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-royal-gold"
+                                aria-required="true">
+                            <!-- Services populated by JS -->
+                        </select>
+                    </div>
+                    
+                    <button type="submit" id="bookButton"
+                            class="w-full bg-royal-gold text-black font-bold py-3 rounded hover:bg-royal-silver transition disabled:opacity-50 disabled:cursor-not-allowed">
+                        Get Token
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- Current Token Display -->
+        <section class="mb-8">
+            <div class="bg-gradient-to-r from-royal-gold to-royal-silver text-black rounded-lg p-6 text-center shadow-lg">
+                <h2 class="text-sm font-medium mb-1">NOW SERVING</h2>
+                <div id="currentTokenDisplay" class="text-5xl font-bold">0</div>
+                <p class="text-sm mt-2">Please wait for your token to be called</p>
+            </div>
+        </section>
+
+        <!-- Waiting List -->
+        <section class="mb-8">
+            <div class="bg-white text-black rounded-lg p-6 shadow-lg">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold text-royal-gold">Waiting List</h2>
+                    <button onclick="refreshWaitingList()" class="bg-gray-800 text-white px-3 py-1 rounded text-sm hover:bg-gray-700">
+                        Refresh
+                    </button>
+                </div>
+                
+                <div id="waitingList" class="space-y-3">
+                    <!-- Waiting list populated by JS -->
+                </div>
+                
+                <div id="emptyWaitingList" class="text-center py-8 text-gray-500 hidden">
+                    <p>No customers waiting</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Gallery Placeholder -->
+        <section class="mb-8">
+            <div class="bg-white text-black rounded-lg p-6 shadow-lg">
+                <h2 class="text-2xl font-bold text-royal-gold mb-4">Our Services</h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-gray-100 rounded-lg p-4 text-center">
+                        <div class="w-12 h-12 bg-royal-gold rounded-full mx-auto mb-2 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                        </div>
+                        <p class="text-sm">Haircut</p>
+                    </div>
+                    <div class="bg-gray-100 rounded-lg p-4 text-center">
+                        <div class="w-12 h-12 bg-royal-gold rounded-full mx-auto mb-2 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                        </div>
+                        <p class="text-sm">Beard Trim</p>
+                    </div>
+                    <div class="bg-gray-100 rounded-lg p-4 text-center">
+                        <div class="w-12 h-12 bg-royal-gold rounded-full mx-auto mb-2 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                        </div>
+                        <p class="text-sm">Hair Color</p>
+                    </div>
+                    <div class="bg-gray-100 rounded-lg p-4 text-center">
+                        <div class="w-12 h-12 bg-royal-gold rounded-full mx-auto mb-2 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                        </div>
+                        <p class="text-sm">Facial</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="fixed top-4 right-4 space-y-2 z-50 max-w-sm"></div>
+
+    <!-- Admin Login Modal -->
+    <div id="adminLoginModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white text-black rounded-lg p-6 w-full max-w-sm mx-4">
+            <h3 class="text-xl font-bold text-royal-gold mb-4">Admin Login</h3>
+            <div class="space-y-4">
+                <div>
+                    <label for="adminPassword" class="block text-sm font-medium mb-1">Password</label>
+                    <input type="password" id="adminPassword" 
+                           class="w-full bg-gray-100 text-black px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-royal-gold">
+                </div>
+                <div class="flex space-x-3">
+                    <button onclick="attemptAdminLogin()" class="flex-1 bg-royal-gold text-black font-bold py-2 rounded hover:bg-royal-silver">
+                        Login
+                    </button>
+                    <button onclick="hideAdminLogin()" class="flex-1 bg-gray-800 text-white font-bold py-2 rounded hover:bg-gray-700">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Panel -->
+    <div id="adminPanel" class="fixed inset-0 bg-black z-50 overflow-y-auto hidden">
+        <div class="container mx-auto px-4 py-8">
+            <!-- Admin Header -->
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-3xl font-bold text-royal-gold">Admin Panel</h2>
+                <button onclick="hideAdminPanel()" class="bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-700 border border-royal-silver">
+                    Close
+                </button>
+            </div>
+
+            <!-- Current Token Control -->
+            <div class="bg-white text-black rounded-lg p-6 mb-6 shadow-lg">
+                <h3 class="text-xl font-bold text-royal-gold mb-4">Current Token Control</h3>
+                <div class="flex items-center space-x-4 mb-4">
+                    <div class="text-3xl font-bold bg-gray-100 px-4 py-2 rounded">Token: <span id="adminCurrentToken">0</span></div>
+                    <button onclick="callNextToken()" class="bg-royal-gold text-black font-bold px-4 py-2 rounded hover:bg-royal-silver">
+                        Call Next
+                    </button>
+                    <button onclick="resetTokens()" class="bg-red-600 text-white font-bold px-4 py-2 rounded hover:bg-red-700">
+                        Reset
+                    </button>
+                </div>
+                <div class="text-sm text-gray-600">
+                    ETA for next customer: <span id="etaDisplay">0 min</span>
+                </div>
+            </div>
+
+            <!-- Shop Controls -->
+            <div class="bg-white text-black rounded-lg p-6 mb-6 shadow-lg">
+                <h3 class="text-xl font-bold text-royal-gold mb-4">Shop Controls</h3>
+                <div class="flex items-center justify-between">
+                    <span>Shop Status:</span>
+                    <div class="relative inline-block w-12 mr-2 align-middle select-none">
+                        <input type="checkbox" id="shopToggle" class="toggle-checkbox hidden" 
+                               onchange="toggleShopStatus()">
+                        <label for="shopToggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-700 cursor-pointer"></label>
+                    </div>
+                    <span id="shopStatusText" class="text-royal-gold">Open</span>
+                </div>
+            </div>
+
+            <!-- Add Service Form -->
+            <div class="bg-white text-black rounded-lg p-6 mb-6 shadow-lg">
+                <h3 class="text-xl font-bold text-royal-gold mb-4">Add New Service</h3>
+                <form id="addServiceForm" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                        <label for="serviceName" class="block text-sm font-medium mb-1">Service Name</label>
+                        <input type="text" id="serviceName" required
+                               class="w-full bg-gray-100 text-black px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-royal-gold">
+                    </div>
+                    <div>
+                        <label for="serviceDuration" class="block text-sm font-medium mb-1">Duration (min)</label>
+                        <input type="number" id="serviceDuration" required min="5"
+                               class="w-full bg-gray-100 text-black px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-royal-gold">
+                    </div>
+                    <div>
+                        <label for="servicePrice" class="block text-sm font-medium mb-1">Price (₹)</label>
+                        <input type="number" id="servicePrice" required min="0"
+                               class="w-full bg-gray-100 text-black px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-royal-gold">
+                    </div>
+                    <div class="flex items-end">
+                        <button type="submit" class="w-full bg-royal-gold text-black font-bold py-2 rounded hover:bg-royal-silver">
+                            Add Service
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Admin Actions -->
+            <div class="bg-white text-black rounded-lg p-6 mb-6 shadow-lg">
+                <h3 class="text-xl font-bold text-royal-gold mb-4">Admin Actions</h3>
+                <div class="flex space-x-4">
+                    <button onclick="refreshAdminData()" class="bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-700">
+                        Refresh Data
+                    </button>
+                    <button onclick="exportToCSV()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                        Export CSV
+                    </button>
+                </div>
+            </div>
+
+            <!-- All Bookings -->
+            <div class="bg-white text-black rounded-lg p-6 shadow-lg">
+                <h3 class="text-xl font-bold text-royal-gold mb-4">All Bookings</h3>
+                <div id="adminBookingsList" class="space-y-3">
+                    <!-- Admin bookings populated by JS -->
+                </div>
+                
+                <div id="emptyAdminBookings" class="text-center py-8 text-gray-500 hidden">
+                    <p>No bookings found</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Barber Shop Token System - Firebase Integrated
+        (function() {
+            'use strict';
+            
+            // Firebase Configuration
+            const firebaseConfig = {
+                apiKey: "AIzaSyBHNe2PgZJfHviPIgBihIckemNQRtknqXY",
+                authDomain: "earnnow-166b8.firebaseapp.com",
+                databaseURL: "https://earnnow-166b8-default-rtdb.firebaseio.com",
+                projectId: "earnnow-166b8",
+                storageBucket: "earnnow-166b8.firebasestorage.app",
+                messagingSenderId: "42131166899",
+                appId: "1:42131166899:web:d4ceb72b27b0efd90802c6",
+                measurementId: "G-0FF9VS6JF9"
+            };
+
+            // Initialize Firebase
+            firebase.initializeApp(firebaseConfig);
+            const database = firebase.database();
+            
+            // Constants
+            const ADMIN_PASSWORD = '7000';
+            const LOYALTY_POINTS_PER_BOOKING = 10;
+            
+            // Storage keys (for localStorage fallback and Firebase paths)
+            const STORAGE_KEYS = {
+                SERVICES: 'barber_services',
+                BOOKINGS: 'barber_bookings',
+                CURRENT_TOKEN: 'current_token',
+                LOYALTY_POINTS: 'loyalty_points',
+                SHOP_OPEN: 'shop_open'
+            };
+            
+            // State
+            let currentToken = 0;
+            let shopOpen = true;
+            let undoBooking = null;
+            let undoTimeout = null;
+            let isOnline = true;
+            
+            // DOM Elements
+            const elements = {
+                bookingForm: document.getElementById('bookingForm'),
+                serviceSelect: document.getElementById('serviceSelect'),
+                currentTokenDisplay: document.getElementById('currentTokenDisplay'),
+                waitingList: document.getElementById('waitingList'),
+                emptyWaitingList: document.getElementById('emptyWaitingList'),
+                shopClosedBanner: document.getElementById('shopClosedBanner'),
+                bookingSection: document.getElementById('bookingSection'),
+                bookButton: document.getElementById('bookButton'),
+                adminAccess: document.getElementById('adminAccess'),
+                adminLoginModal: document.getElementById('adminLoginModal'),
+                adminPanel: document.getElementById('adminPanel'),
+                adminCurrentToken: document.getElementById('adminCurrentToken'),
+                adminBookingsList: document.getElementById('adminBookingsList'),
+                emptyAdminBookings: document.getElementById('emptyAdminBookings'),
+                shopToggle: document.getElementById('shopToggle'),
+                shopStatusText: document.getElementById('shopStatusText'),
+                addServiceForm: document.getElementById('addServiceForm'),
+                etaDisplay: document.getElementById('etaDisplay'),
+                toastContainer: document.getElementById('toastContainer'),
+                shopStatusLight: document.getElementById('shopStatusLight')
+            };
+            
+            // Initialize application
+            function init() {
+                setupEventListeners();
+                initializeFirebaseListeners();
+                checkAdminAccess();
+                setupLogoLongPress();
+                
+                // Load initial data from Firebase
+                loadFromFirebase().then(() => {
+                    loadServices();
+                    loadBookings();
+                    loadCurrentToken();
+                    loadShopStatus();
+                });
+            }
+            
+            // Set up event listeners
+            function setupEventListeners() {
+                elements.bookingForm.addEventListener('submit', handleBooking);
+                elements.addServiceForm.addEventListener('submit', handleAddService);
+                
+                // Close modals on backdrop click
+                elements.adminLoginModal.addEventListener('click', function(e) {
+                    if (e.target === this) hideAdminLogin();
+                });
+                
+                elements.adminPanel.addEventListener('click', function(e) {
+                    if (e.target === this) hideAdminPanel();
+                });
+                
+                // Check for admin query parameter
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('admin') === '1') {
+                    showAdminLogin();
+                }
+            }
+            
+            // Initialize Firebase realtime listeners
+            function initializeFirebaseListeners() {
+                // Listen for services changes
+                database.ref('services').on('value', (snapshot) => {
+                    const services = snapshot.val();
+                    if (services) {
+                        localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(services));
+                        loadServices();
+                    }
+                });
+                
+                // Listen for bookings changes
+                database.ref('bookings').on('value', (snapshot) => {
+                    const bookings = snapshot.val();
+                    if (bookings) {
+                        const bookingsArray = Object.values(bookings);
+                        localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(bookingsArray));
+                        loadBookings();
+                        refreshAdminData();
+                    }
+                });
+                
+                // Listen for current token changes
+                database.ref('current_token').on('value', (snapshot) => {
+                    const token = snapshot.val();
+                    if (token !== null) {
+                        localStorage.setItem(STORAGE_KEYS.CURRENT_TOKEN, token.toString());
+                        loadCurrentToken();
+                    }
+                });
+                
+                // Listen for shop status changes
+                database.ref('shop_open').on('value', (snapshot) => {
+                    const status = snapshot.val();
+                    if (status !== null) {
+                        localStorage.setItem(STORAGE_KEYS.SHOP_OPEN, status.toString());
+                        loadShopStatus();
+                    }
+                });
+                
+                // Listen for loyalty points changes
+                database.ref('loyalty_points').on('value', (snapshot) => {
+                    const points = snapshot.val();
+                    if (points) {
+                        localStorage.setItem(STORAGE_KEYS.LOYALTY_POINTS, JSON.stringify(points));
+                    }
+                });
+            }
+            
+            // Initialize with sample data if empty
+            function initializeData() {
+                // Check if Firebase has data, if not initialize with sample data
+                database.ref('services').once('value').then((snapshot) => {
+                    if (!snapshot.exists()) {
+                        const defaultServices = [
+                            { id: 1, name: 'Haircut', duration: 30, price: 200 },
+                            { id: 2, name: 'Beard Trim', duration: 15, price: 100 },
+                            { id: 3, name: 'Haircut + Beard', duration: 45, price: 250 },
+                            { id: 4, name: 'Hair Color', duration: 60, price: 500 },
+                            { id: 5, name: 'Facial', duration: 45, price: 300 }
+                        ];
+                        syncToFirebase('services', defaultServices);
+                    }
+                });
+                
+                database.ref('bookings').once('value').then((snapshot) => {
+                    if (!snapshot.exists()) {
+                        const sampleBookings = [
+                            {
+                                id: generateId(),
+                                token: 1,
+                                name: 'Raj Sharma',
+                                phone: '9876543210',
+                                service: 'Haircut',
+                                price: 200,
+                                duration: 30,
+                                status: 'completed',
+                                createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+                            },
+                            {
+                                id: generateId(),
+                                token: 2,
+                                name: 'Amit Patel',
+                                phone: '9876543211',
+                                service: 'Beard Trim',
+                                price: 100,
+                                duration: 15,
+                                status: 'pending',
+                                createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString()
+                            }
+                        ];
+                        syncToFirebase('bookings', sampleBookings);
+                        
+                        // Award loyalty points for completed sample booking
+                        awardLoyaltyPoints('9876543210', LOYALTY_POINTS_PER_BOOKING);
+                    }
+                });
+                
+                database.ref('current_token').once('value').then((snapshot) => {
+                    if (!snapshot.exists()) {
+                        syncToFirebase('current_token', 0);
+                    }
+                });
+                
+                database.ref('shop_open').once('value').then((snapshot) => {
+                    if (!snapshot.exists()) {
+                        syncToFirebase('shop_open', true);
+                    }
+                });
+                
+                database.ref('loyalty_points').once('value').then((snapshot) => {
+                    if (!snapshot.exists()) {
+                        syncToFirebase('loyalty_points', {});
+                    }
+                });
+            }
+            
+            // Load services into select dropdown
+            function loadServices() {
+                const services = getServices();
+                elements.serviceSelect.innerHTML = '';
+                
+                services.forEach(service => {
+                    const option = document.createElement('option');
+                    option.value = service.id;
+                    option.textContent = `${service.name} - ${service.duration}min - ₹${service.price}`;
+                    elements.serviceSelect.appendChild(option);
+                });
+            }
+            
+            // Handle booking form submission
+            function handleBooking(e) {
+                e.preventDefault();
+                
+                if (!shopOpen) {
+                    showToast('Shop is currently closed', 'error');
+                    return;
+                }
+                
+                const name = document.getElementById('customerName').value.trim();
+                const phone = document.getElementById('customerPhone').value.trim();
+                const serviceId = parseInt(elements.serviceSelect.value);
+                
+                // Validate phone
+                if (!/^\d{10}$/.test(phone)) {
+                    showToast('Please enter a valid 10-digit phone number', 'error');
+                    return;
+                }
+                
+                // Find selected service
+                const services = getServices();
+                const selectedService = services.find(s => s.id === serviceId);
+                
+                if (!selectedService) {
+                    showToast('Please select a valid service', 'error');
+                    return;
+                }
+                
+                // Create booking
+                const bookings = getBookings();
+                const nextToken = bookings.length > 0 ? Math.max(...bookings.map(b => b.token)) + 1 : 1;
+                
+                const booking = {
+                    id: generateId(),
+                    token: nextToken,
+                    name: name,
+                    phone: phone,
+                    service: selectedService.name,
+                    price: selectedService.price,
+                    duration: selectedService.duration,
+                    status: 'pending',
+                    createdAt: new Date().toISOString()
+                };
+                
+                // Add to local storage and sync to Firebase
+                bookings.push(booking);
+                saveBookings(bookings);
+                syncToFirebase('bookings', bookings);
+                
+                // Show confirmation with token number
+                showToast(`Booking confirmed! Your token number is ${nextToken}`, 'success');
+                
+                // Check and show loyalty points
+                const points = getLoyaltyPoints(phone);
+                if (points > 0) {
+                    setTimeout(() => {
+                        showToast(`You have ${points} loyalty points`, 'info');
+                    }, 2000);
+                }
+                
+                // Reset form
+                elements.bookingForm.reset();
+                
+                // Refresh displays
+                loadBookings();
+                refreshAdminData();
+            }
+            
+            // Handle add service form submission
+            function handleAddService(e) {
+                e.preventDefault();
+                
+                const name = document.getElementById('serviceName').value.trim();
+                const duration = parseInt(document.getElementById('serviceDuration').value);
+                const price = parseInt(document.getElementById('servicePrice').value);
+                
+                if (!name || !duration || !price) {
+                    showToast('Please fill all fields', 'error');
+                    return;
+                }
+                
+                const services = getServices();
+                const newService = {
+                    id: services.length > 0 ? Math.max(...services.map(s => s.id)) + 1 : 1,
+                    name: name,
+                    duration: duration,
+                    price: price
+                };
+                
+                services.push(newService);
+                saveServices(services);
+                syncToFirebase('services', services);
+                
+                showToast('Service added successfully', 'success');
+                elements.addServiceForm.reset();
+                loadServices();
+            }
+            
+            // Load and display bookings in waiting list
+            function loadBookings() {
+                const bookings = getBookings();
+                const pendingBookings = bookings.filter(b => b.status === 'pending' && b.token <= currentToken);
+                
+                elements.waitingList.innerHTML = '';
+                
+                if (pendingBookings.length === 0) {
+                    elements.emptyWaitingList.classList.remove('hidden');
+                    return;
+                }
+                
+                elements.emptyWaitingList.classList.add('hidden');
+                
+                pendingBookings.forEach(booking => {
+                    const bookingElement = document.createElement('div');
+                    bookingElement.className = 'bg-gray-100 rounded-lg p-4 fade-in';
+                    bookingElement.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center space-x-3">
+                                <div class="bg-royal-gold text-black font-bold rounded-full w-10 h-10 flex items-center justify-center">
+                                    ${booking.token}
+                                </div>
+                                <div>
+                                    <h3 class="font-medium">${booking.name}</h3>
+                                    <p class="text-sm text-gray-600">${booking.service}</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm">₹${booking.price}</p>
+                                <p class="text-xs text-gray-600">${formatDateTime(booking.createdAt)}</p>
+                            </div>
+                        </div>
+                    `;
+                    elements.waitingList.appendChild(bookingElement);
+                });
+            }
+            
+            // Load current token from storage
+            function loadCurrentToken() {
+                const token = localStorage.getItem(STORAGE_KEYS.CURRENT_TOKEN);
+                currentToken = parseInt(token) || 0;
+                elements.currentTokenDisplay.textContent = currentToken;
+                elements.adminCurrentToken.textContent = currentToken;
+            }
+            
+            // Load shop status from storage
+            function loadShopStatus() {
+                const status = localStorage.getItem(STORAGE_KEYS.SHOP_OPEN);
+                shopOpen = status === 'true';
+                
+                elements.shopToggle.checked = shopOpen;
+                updateShopStatusDisplay();
+            }
+            
+            // Update shop status display
+            function updateShopStatusDisplay() {
+                const light = elements.shopStatusLight.querySelector('.w-3');
+                const text = elements.shopStatusLight.querySelector('span');
+                
+                if (shopOpen) {
+                    elements.shopClosedBanner.classList.add('hidden');
+                    elements.bookButton.disabled = false;
+                    elements.shopStatusText.textContent = 'Open';
+                    elements.shopStatusText.classList.remove('text-red-500');
+                    elements.shopStatusText.classList.add('text-royal-gold');
+                    
+                    // Update status light
+                    light.className = 'w-3 h-3 rounded-full status-light animate-pulse-glow bg-green-500';
+                    text.textContent = 'Shop Open';
+                    text.className = 'text-sm text-green-500';
+                } else {
+                    elements.shopClosedBanner.classList.remove('hidden');
+                    elements.bookButton.disabled = true;
+                    elements.shopStatusText.textContent = 'Closed';
+                    elements.shopStatusText.classList.remove('text-royal-gold');
+                    elements.shopStatusText.classList.add('text-red-500');
+                    
+                    // Update status light
+                    light.className = 'w-3 h-3 rounded-full status-light animate-pulse-glow bg-red-500';
+                    text.textContent = 'Shop Closed';
+                    text.className = 'text-sm text-red-500';
+                }
+            }
+            
+            // Toggle shop open/closed status
+            function toggleShopStatus() {
+                shopOpen = !shopOpen;
+                localStorage.setItem(STORAGE_KEYS.SHOP_OPEN, shopOpen.toString());
+                syncToFirebase('shop_open', shopOpen);
+                updateShopStatusDisplay();
+                showToast(`Shop is now ${shopOpen ? 'OPEN' : 'CLOSED'}`, 'info');
+            }
+            
+            // Call next token (admin function)
+            function callNextToken() {
+                currentToken++;
+                localStorage.setItem(STORAGE_KEYS.CURRENT_TOKEN, currentToken.toString());
+                syncToFirebase('current_token', currentToken);
+                elements.currentTokenDisplay.textContent = currentToken;
+                elements.adminCurrentToken.textContent = currentToken;
+                
+                loadBookings();
+                updateETA();
+                showToast(`Now serving token ${currentToken}`, 'info');
+            }
+            
+            // Reset tokens (admin function)
+            function resetTokens() {
+                if (confirm('Are you sure you want to reset all tokens? This cannot be undone.')) {
+                    currentToken = 0;
+                    localStorage.setItem(STORAGE_KEYS.CURRENT_TOKEN, '0');
+                    syncToFirebase('current_token', 0);
+                    elements.currentTokenDisplay.textContent = '0';
+                    elements.adminCurrentToken.textContent = '0';
+                    
+                    loadBookings();
+                    updateETA();
+                    showToast('Tokens reset to 0', 'info');
+                }
+            }
+            
+            // Update ETA display in admin panel
+            function updateETA() {
+                const bookings = getBookings();
+                const pendingBeforeCurrent = bookings.filter(b => 
+                    b.status === 'pending' && b.token < currentToken
+                );
+                
+                const totalDuration = pendingBeforeCurrent.reduce((sum, booking) => sum + booking.duration, 0);
+                elements.etaDisplay.textContent = `${totalDuration} min`;
+            }
+            
+            // Mark booking as completed
+            function markBookingCompleted(bookingId) {
+                const bookings = getBookings();
+                const booking = bookings.find(b => b.id === bookingId);
+                
+                if (booking) {
+                    booking.status = 'completed';
+                    saveBookings(bookings);
+                    syncToFirebase('bookings', bookings);
+                    
+                    // Award loyalty points
+                    awardLoyaltyPoints(booking.phone, LOYALTY_POINTS_PER_BOOKING);
+                    
+                    showToast(`Booking ${booking.token} marked as completed`, 'success');
+                    refreshAdminData();
+                    loadBookings();
+                }
+            }
+            
+            // Cancel booking with undo option
+            function cancelBooking(bookingId) {
+                const bookings = getBookings();
+                const bookingIndex = bookings.findIndex(b => b.id === bookingId);
+                
+                if (bookingIndex !== -1) {
+                    undoBooking = bookings[bookingIndex];
+                    bookings.splice(bookingIndex, 1);
+                    saveBookings(bookings);
+                    syncToFirebase('bookings', bookings);
+                    
+                    showUndoToast(`Booking ${undoBooking.token} cancelled`);
+                    refreshAdminData();
+                    loadBookings();
+                    
+                    // Set timeout to clear undo option
+                    undoTimeout = setTimeout(() => {
+                        undoBooking = null;
+                    }, 5000);
+                }
+            }
+            
+            // Delete booking permanently
+            function deleteBooking(bookingId) {
+                if (confirm('Are you sure you want to permanently delete this booking?')) {
+                    const bookings = getBookings();
+                    const bookingIndex = bookings.findIndex(b => b.id === bookingId);
+                    
+                    if (bookingIndex !== -1) {
+                        bookings.splice(bookingIndex, 1);
+                        saveBookings(bookings);
+                        syncToFirebase('bookings', bookings);
+                        
+                        showToast('Booking deleted permanently', 'info');
+                        refreshAdminData();
+                        loadBookings();
+                    }
+                }
+            }
+            
+            // Undo last cancellation
+            function undoLastCancellation() {
+                if (undoBooking) {
+                    const bookings = getBookings();
+                    bookings.push(undoBooking);
+                    saveBookings(bookings);
+                    syncToFirebase('bookings', bookings);
+                    
+                    undoBooking = null;
+                    clearTimeout(undoTimeout);
+                    
+                    showToast('Booking restored', 'success');
+                    refreshAdminData();
+                    loadBookings();
+                }
+            }
+            
+            // Refresh admin data display
+            function refreshAdminData() {
+                const bookings = getBookings();
+                
+                elements.adminBookingsList.innerHTML = '';
+                
+                if (bookings.length === 0) {
+                    elements.emptyAdminBookings.classList.remove('hidden');
+                    return;
+                }
+                
+                elements.emptyAdminBookings.classList.add('hidden');
+                
+                // Sort by token number
+                bookings.sort((a, b) => a.token - b.token);
+                
+                bookings.forEach(booking => {
+                    const bookingElement = document.createElement('div');
+                    bookingElement.className = 'bg-gray-100 rounded-lg p-4 fade-in';
+                    
+                    const statusClass = booking.status === 'completed' ? 'bg-green-600' : 
+                                      booking.status === 'cancelled' ? 'bg-red-600' : 'bg-royal-gold';
+                    
+                    bookingElement.innerHTML = `
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="flex items-center space-x-3">
+                                <div class="bg-royal-gold text-black font-bold rounded-full w-8 h-8 flex items-center justify-center text-sm">
+                                    ${booking.token}
+                                </div>
+                                <div>
+                                    <h3 class="font-medium">${booking.name}</h3>
+                                    <p class="text-sm text-gray-600">${booking.phone} • ${booking.service}</p>
+                                </div>
+                            </div>
+                            <span class="${statusClass} text-white text-xs px-2 py-1 rounded">
+                                ${booking.status.toUpperCase()}
+                            </span>
+                        </div>
+                        
+                        <div class="flex justify-between items-center text-sm">
+                            <div>
+                                <span>₹${booking.price}</span>
+                                <span class="text-gray-600 mx-2">•</span>
+                                <span>${booking.duration}min</span>
+                                <span class="text-gray-600 mx-2">•</span>
+                                <span>${formatDateTime(booking.createdAt)}</span>
+                            </div>
+                            
+                            <div class="space-x-2">
+                                ${booking.status === 'pending' ? `
+                                    <button onclick="markBookingCompleted('${booking.id}')" 
+                                            class="bg-green-600 text-white text-xs px-2 py-1 rounded hover:bg-green-700">
+                                        Complete
+                                    </button>
+                                    <button onclick="cancelBooking('${booking.id}')" 
+                                            class="bg-red-600 text-white text-xs px-2 py-1 rounded hover:bg-red-700">
+                                        Cancel
+                                    </button>
+                                ` : ''}
+                                <button onclick="deleteBooking('${booking.id}')" 
+                                        class="bg-gray-600 text-white text-xs px-2 py-1 rounded hover:bg-gray-700">
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    elements.adminBookingsList.appendChild(bookingElement);
+                });
+                
+                updateETA();
+            }
+            
+            // Export bookings to CSV
+            function exportToCSV() {
+                const bookings = getBookings();
+                
+                if (bookings.length === 0) {
+                    showToast('No bookings to export', 'info');
+                    return;
+                }
+                
+                // CSV headers
+                let csv = 'Token,Name,Phone,Service,Price,Status,Created At\n';
+                
+                // Add rows
+                bookings.forEach(booking => {
+                    csv += `"${booking.token}","${booking.name}","${booking.phone}","${booking.service}",${booking.price},"${booking.status}","${booking.createdAt}"\n`;
+                });
+                
+                // Create download link
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `bookings_export_${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showToast('CSV exported successfully', 'success');
+            }
+            
+            // Check loyalty points for phone number
+            function checkPoints() {
+                const phone = document.getElementById('pointsPhone').value.trim();
+                if (!/^\d{10}$/.test(phone)) {
+                    showToast('Please enter a valid 10-digit phone number', 'error');
+                    return;
+                }
+                
+                const points = getLoyaltyPoints(phone);
+                showToast(`You have ${points} loyalty points`, 'info');
+            }
+            
+            function checkPointsMobile() {
+                const phone = document.getElementById('pointsPhoneMobile').value.trim();
+                if (!/^\d{10}$/.test(phone)) {
+                    showToast('Please enter a valid 10-digit phone number', 'error');
+                    return;
+                }
+                
+                const points = getLoyaltyPoints(phone);
+                showToast(`You have ${points} loyalty points`, 'info');
+            }
+            
+            // Show admin login modal
+            function showAdminLogin() {
+                elements.adminLoginModal.classList.remove('hidden');
+                document.getElementById('adminPassword').focus();
+            }
+            
+            // Hide admin login modal
+            function hideAdminLogin() {
+                elements.adminLoginModal.classList.add('hidden');
+                document.getElementById('adminPassword').value = '';
+            }
+            
+            // Attempt admin login
+            function attemptAdminLogin() {
+                const password = document.getElementById('adminPassword').value;
+                
+                if (password === ADMIN_PASSWORD) {
+                    hideAdminLogin();
+                    showAdminPanel();
+                    showToast('Admin login successful', 'success');
+                } else {
+                    showToast('Invalid password', 'error');
+                }
+            }
+            
+            // Show admin panel
+            function showAdminPanel() {
+                elements.adminPanel.classList.remove('hidden');
+                refreshAdminData();
+            }
+            
+            // Hide admin panel
+            function hideAdminPanel() {
+                elements.adminPanel.classList.add('hidden');
+            }
+            
+            // Check if admin access should be shown
+            function checkAdminAccess() {
+                elements.adminAccess.classList.remove('hidden');
+            }
+            
+            // Setup long press on logo for admin access
+            function setupLogoLongPress() {
+                const logo = document.getElementById('shopLogo');
+                let pressTimer;
+                
+                logo.addEventListener('mousedown', function() {
+                    pressTimer = setTimeout(function() {
+                        showAdminLogin();
+                    }, 1000);
+                });
+                
+                logo.addEventListener('mouseup', function() {
+                    clearTimeout(pressTimer);
+                });
+                
+                logo.addEventListener('mouseleave', function() {
+                    clearTimeout(pressTimer);
+                });
+                
+                // Touch events for mobile
+                logo.addEventListener('touchstart', function(e) {
+                    e.preventDefault();
+                    pressTimer = setTimeout(function() {
+                        showAdminLogin();
+                    }, 1000);
+                });
+                
+                logo.addEventListener('touchend', function() {
+                    clearTimeout(pressTimer);
+                });
+            }
+            
+            // Refresh waiting list
+            function refreshWaitingList() {
+                loadBookings();
+                showToast('Waiting list refreshed', 'info');
+            }
+            
+            // Show toast notification
+            function showToast(message, type = 'info') {
+                const toast = document.createElement('div');
+                toast.className = `toast bg-white border-l-4 p-4 rounded shadow-lg fade-in ${
+                    type === 'success' ? 'border-green-500' :
+                    type === 'error' ? 'border-red-500' :
+                    type === 'warning' ? 'border-yellow-500' : 'border-royal-gold'
+                }`;
+                
+                toast.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <p class="text-black">${message}</p>
+                        <button onclick="this.parentElement.parentElement.remove()" class="text-gray-600 hover:text-black ml-4">
+                            ×
+                        </button>
+                    </div>
+                `;
+                
+                elements.toastContainer.appendChild(toast);
+                
+                setTimeout(() => {
+                    if (toast.parentElement) {
+                        toast.style.opacity = '0';
+                        setTimeout(() => {
+                            if (toast.parentElement) {
+                                toast.parentElement.removeChild(toast);
+                            }
+                        }, 300);
+                    }
+                }, 5000);
+            }
+            
+            // Show undo toast
+            function showUndoToast(message) {
+                const toast = document.createElement('div');
+                toast.className = 'toast bg-white border-l-4 border-royal-gold p-4 rounded shadow-lg fade-in';
+                
+                toast.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <p class="text-black">${message}</p>
+                        <div class="flex space-x-2 ml-4">
+                            <button onclick="undoLastCancellation()" class="text-royal-gold hover:text-royal-silver text-sm">
+                                Undo
+                            </button>
+                            <button onclick="this.parentElement.parentElement.parentElement.remove()" class="text-gray-600 hover:text-black">
+                                ×
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                elements.toastContainer.appendChild(toast);
+                
+                setTimeout(() => {
+                    if (toast.parentElement) {
+                        toast.style.opacity = '0';
+                        setTimeout(() => {
+                            if (toast.parentElement) {
+                                toast.parentElement.removeChild(toast);
+                                undoBooking = null;
+                                clearTimeout(undoTimeout);
+                                }
+                        }, 300);
+                    }
+                }, 5000);
+            }
+            
+            // Data storage functions
+            function getServices() {
+                return JSON.parse(localStorage.getItem(STORAGE_KEYS.SERVICES) || '[]');
+            }
+            
+            function saveServices(services) {
+                localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(services));
+            }
+            
+            function getBookings() {
+                return JSON.parse(localStorage.getItem(STORAGE_KEYS.BOOKINGS) || '[]');
+            }
+            
+            function saveBookings(bookings) {
+                localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(bookings));
+            }
+            
+            function getLoyaltyPoints(phone) {
+                const pointsData = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOYALTY_POINTS) || '{}');
+                return pointsData[phone] || 0;
+            }
+            
+            function awardLoyaltyPoints(phone, points) {
+                const pointsData = JSON.parse(localStorage.getItem(STORAGE_KEYS.LOYALTY_POINTS) || '{}');
+                pointsData[phone] = (pointsData[phone] || 0) + points;
+                localStorage.setItem(STORAGE_KEYS.LOYALTY_POINTS, JSON.stringify(pointsData));
+                syncToFirebase('loyalty_points', pointsData);
+            }
+            
+            // Utility functions
+            function generateId() {
+                return Date.now().toString(36) + Math.random().toString(36).substr(2);
+            }
+            
+            function formatDateTime(isoString) {
+                const date = new Date(isoString);
+                return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            }
+            
+            // Firebase sync function
+            function syncToFirebase(key, data) {
+                try {
+                    database.ref(key).set(data)
+                        .then(() => console.log(`Data synced to Firebase: ${key}`))
+                        .catch((error) => {
+                            console.error(`Firebase sync error for ${key}:`, error);
+                            showToast('Sync error - using local storage', 'error');
+                        });
+                } catch (error) {
+                    console.error('Firebase sync failed:', error);
+                }
+            }
+            
+            // Load data from Firebase
+            async function loadFromFirebase() {
+                try {
+                    const servicesSnapshot = await database.ref('services').once('value');
+                    const bookingsSnapshot = await database.ref('bookings').once('value');
+                    const tokenSnapshot = await database.ref('current_token').once('value');
+                    const shopStatusSnapshot = await database.ref('shop_open').once('value');
+                    const pointsSnapshot = await database.ref('loyalty_points').once('value');
+                    
+                    if (servicesSnapshot.exists()) {
+                        localStorage.setItem(STORAGE_KEYS.SERVICES, JSON.stringify(servicesSnapshot.val()));
+                    } else {
+                        initializeData();
+                    }
+                    
+                    if (bookingsSnapshot.exists()) {
+                        const bookings = Object.values(bookingsSnapshot.val());
+                        localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(bookings));
+                    }
+                    
+                    if (tokenSnapshot.exists()) {
+                        localStorage.setItem(STORAGE_KEYS.CURRENT_TOKEN, tokenSnapshot.val().toString());
+                    }
+                    
+                    if (shopStatusSnapshot.exists()) {
+                        localStorage.setItem(STORAGE_KEYS.SHOP_OPEN, shopStatusSnapshot.val().toString());
+                    }
+                    
+                    if (pointsSnapshot.exists()) {
+                        localStorage.setItem(STORAGE_KEYS.LOYALTY_POINTS, JSON.stringify(pointsSnapshot.val()));
+                    }
+                    
+                } catch (error) {
+                    console.error('Error loading from Firebase:', error);
+                    showToast('Using local storage data', 'info');
+                }
+            }
+            
+            // Make functions globally available for HTML onclick handlers
+            window.handleBooking = handleBooking;
+            window.handleAddService = handleAddService;
+            window.callNextToken = callNextToken;
+            window.resetTokens = resetTokens;
+            window.toggleShopStatus = toggleShopStatus;
+            window.refreshAdminData = refreshAdminData;
+            window.exportToCSV = exportToCSV;
+            window.markBookingCompleted = markBookingCompleted;
+            window.cancelBooking = cancelBooking;
+            window.deleteBooking = deleteBooking;
+            window.undoLastCancellation = undoLastCancellation;
+            window.showAdminLogin = showAdminLogin;
+            window.hideAdminLogin = hideAdminLogin;
+            window.attemptAdminLogin = attemptAdminLogin;
+            window.showAdminPanel = showAdminPanel;
+            window.hideAdminPanel = hideAdminPanel;
+            window.refreshWaitingList = refreshWaitingList;
+            window.checkPoints = checkPoints;
+            window.checkPointsMobile = checkPointsMobile;
+            window.showToast = showToast;
+            
+            // Initialize when DOM is loaded
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', init);
+            } else {
+                init();
+            }
+        })();
+    </script>
+
+    <style>
+        /* Toggle switch styling */
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #d4af37;
+        }
+        .toggle-checkbox:checked + .toggle-label:before {
+            transform: translateX(1.5rem);
+        }
+        .toggle-label {
+            transition: all 0.3s ease;
+        }
+        .toggle-label:before {
+            content: '';
+            display: block;
+            position: absolute;
+            width: 1.5rem;
+            height: 1.5rem;
+            border-radius: 50%;
+            background: white;
+            top: 0.25rem;
+            left: 0.25rem;
+            transition: all 0.3s ease;
+        }
+    </style>
+</body>
+</html>
